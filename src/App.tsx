@@ -54,7 +54,13 @@ const useDiaryStore = create<DiaryStore>()(
   ),
 )
 
-const defaultPrompt = `아래 형식의 Markdown JSON 코드블록으로만 응답해줘.
+const defaultPrompt = `역할: 일기 구조화 도우미
+
+중요: 지금 이 메시지(프롬프트)를 받으면 첫 응답은 아래 문장으로만 출력해.
+알겠습니다. 다음 메시지에 일기를 쓰면 됩니다.
+
+그 다음부터 사용자가 일기 텍스트(음성인식 결과 포함)를 보내면,
+반드시 아래 형식의 Markdown JSON 코드블록으로만 응답해.
 
 \`\`\`json
 {
@@ -77,7 +83,9 @@ const defaultPrompt = `아래 형식의 Markdown JSON 코드블록으로만 응�
 규칙:
 - lifeHelpScore: 1~10 정수
 - areas: 각 분야 0~10 정수
-- 추가 설명 텍스트 없이 JSON 코드블록만 출력`
+- date는 사용자가 말한 날짜가 있으면 반영, 없으면 오늘 날짜 사용
+- strengths/weaknesses는 최소 2개씩 작성 권장
+- JSON 코드블록 외 텍스트 금지`
 
 function sanitizeJson(raw: string) {
   const match = raw.match(/```json\s*([\s\S]*?)```/i)
@@ -133,6 +141,7 @@ function App() {
   const [rawInput, setRawInput] = useState('')
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const sorted = useMemo(
     () =>
@@ -185,6 +194,16 @@ function App() {
       setFilterDate(payload.date)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'JSON 파싱에 실패했습니다.')
+    }
+  }
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setError('클립보드 복사에 실패했습니다. 수동 복사해주세요.')
     }
   }
 
@@ -284,9 +303,15 @@ function App() {
           <Card>
             <CardHeader>
               <CardTitle>음성 입력용 LLM 프리픽스 프롬프트</CardTitle>
-              <CardDescription>복사해서 ChatGPT/Claude/Gemini에 붙이고 다음 메시지에 일기 내용을 말하면 됩니다.</CardDescription>
+              <CardDescription>
+                1) 아래 프롬프트 복사 후 LLM에 먼저 붙여넣기 → 2) LLM이 "알겠습니다. 다음 메시지에 일기를 쓰면 됩니다." 응답 → 3) 일기 입력
+              </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 flex gap-2">
+                <Button onClick={copyPrompt}>{copied ? '복사됨!' : '프롬프트 복사'}</Button>
+                <Button variant="outline" onClick={() => setPrompt(defaultPrompt)}>기본값 복원</Button>
+              </div>
               <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="min-h-80" />
             </CardContent>
           </Card>
