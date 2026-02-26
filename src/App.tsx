@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { format, getISOWeek, isValid, parseISO } from 'date-fns'
+import { format, getISOWeek, isValid, parseISO, subDays } from 'date-fns'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,19 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 
+type DecagonScores = {
+  career: number
+  health: number
+  finance: number
+  relationships: number
+  selfGrowth: number
+  productivity: number
+  emotional: number
+  discipline: number
+  creativity: number
+  leisure: number
+}
+
 type DiaryPayload = {
   date: string
   summary: string
@@ -17,7 +30,7 @@ type DiaryPayload = {
   weaknesses: string[]
   feedback: string
   lifeHelpScore: number
-  areas: Record<string, number>
+  decagonScores: DecagonScores
 }
 
 type DiaryEntry = DiaryPayload & {
@@ -29,6 +42,32 @@ type DiaryStore = {
   entries: DiaryEntry[]
   addEntry: (payload: DiaryPayload) => void
   clearAll: () => void
+}
+
+const scoreKeys: (keyof DecagonScores)[] = [
+  'career',
+  'health',
+  'finance',
+  'relationships',
+  'selfGrowth',
+  'productivity',
+  'emotional',
+  'discipline',
+  'creativity',
+  'leisure',
+]
+
+const defaultScores: DecagonScores = {
+  career: 0,
+  health: 0,
+  finance: 0,
+  relationships: 0,
+  selfGrowth: 0,
+  productivity: 0,
+  emotional: 0,
+  discipline: 0,
+  creativity: 0,
+  leisure: 0,
 }
 
 const useDiaryStore = create<DiaryStore>()(
@@ -54,7 +93,15 @@ const useDiaryStore = create<DiaryStore>()(
   ),
 )
 
-const defaultPrompt = `역할: 일기 구조화 도우미
+const userContextDefault = `사용자 정보(항상 분석에 반영):
+- 이름: 백승우(1991)
+- 직무: 현대자동차 ICT 프론트엔드 개발자, 파트 리더(G3)
+- 관심사: 커리어 성장, 건강 루틴, 자산관리, AI 자동화, 글쓰기
+- 목표: 리더십 성장 + 장기 자산 축적 + 꾸준한 자기계발
+
+분석 시 위 정보를 반드시 함께 고려해서 조언/분석/칭찬을 작성해.`
+
+const defaultInputPrompt = `역할: 일기 구조화 도우미
 
 중요: 지금 이 메시지(프롬프트)를 받으면 첫 응답은 아래 문장으로만 출력해.
 알겠습니다. 다음 메시지에 일기를 쓰면 됩니다.
@@ -70,26 +117,36 @@ const defaultPrompt = `역할: 일기 구조화 도우미
   "weaknesses": ["보완점 1", "보완점 2"],
   "feedback": "내일 더 좋아지기 위한 실전 피드백",
   "lifeHelpScore": 1,
-  "areas": {
+  "decagonScores": {
     "career": 0,
     "health": 0,
     "finance": 0,
     "relationships": 0,
-    "selfGrowth": 0
+    "selfGrowth": 0,
+    "productivity": 0,
+    "emotional": 0,
+    "discipline": 0,
+    "creativity": 0,
+    "leisure": 0
   }
 }
 \`\`\`
 
 규칙:
 - lifeHelpScore: 1~10 정수
-- areas: 각 분야 0~10 정수
+- decagonScores: 10개 분야 각각 0~10 정수
 - date는 사용자가 말한 날짜가 있으면 반영, 없으면 오늘 날짜 사용
-- strengths/weaknesses는 최소 2개씩 작성 권장
+- strengths/weaknesses는 최소 2개씩
 - JSON 코드블록 외 텍스트 금지`
 
 function sanitizeJson(raw: string) {
   const match = raw.match(/```json\s*([\s\S]*?)```/i)
   return (match ? match[1] : raw).trim()
+}
+
+function toScore(value: unknown) {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 0 && n <= 10 ? n : 0
 }
 
 function parsePayload(raw: string): DiaryPayload {
@@ -99,34 +156,33 @@ function parsePayload(raw: string): DiaryPayload {
     throw new Error('date는 YYYY-MM-DD 형식이어야 합니다.')
   }
 
-  const toArray = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
   const score = Number(parsed.lifeHelpScore)
   if (!Number.isInteger(score) || score < 1 || score > 10) {
     throw new Error('lifeHelpScore는 1~10 정수여야 합니다.')
   }
 
-  const areas: Record<string, number> = {}
-  if (parsed.areas && typeof parsed.areas === 'object') {
-    Object.entries(parsed.areas).forEach(([key, value]) => {
-      const n = Number(value)
-      if (Number.isInteger(n) && n >= 0 && n <= 10) {
-        areas[key] = n
-      }
-    })
-  }
-
-  if (!Object.keys(areas).length) {
-    throw new Error('areas는 1개 이상의 분야 점수를 포함해야 합니다.')
+  const source = parsed.decagonScores ?? parsed.areas ?? {}
+  const decagonScores: DecagonScores = {
+    career: toScore(source.career),
+    health: toScore(source.health),
+    finance: toScore(source.finance),
+    relationships: toScore(source.relationships),
+    selfGrowth: toScore(source.selfGrowth),
+    productivity: toScore(source.productivity),
+    emotional: toScore(source.emotional),
+    discipline: toScore(source.discipline),
+    creativity: toScore(source.creativity),
+    leisure: toScore(source.leisure),
   }
 
   return {
     date: parsed.date,
     summary: String(parsed.summary ?? ''),
-    strengths: toArray(parsed.strengths),
-    weaknesses: toArray(parsed.weaknesses),
+    strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
+    weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses.map(String) : [],
     feedback: String(parsed.feedback ?? ''),
     lifeHelpScore: score,
-    areas,
+    decagonScores,
   }
 }
 
@@ -135,19 +191,72 @@ function avg(values: number[]) {
   return values.reduce((a, b) => a + b, 0) / values.length
 }
 
+function averageDecagon(list: DiaryEntry[]): DecagonScores {
+  if (!list.length) return defaultScores
+  return scoreKeys.reduce((acc, key) => {
+    acc[key] = avg(list.map((item) => item.decagonScores[key]))
+    return acc
+  }, { ...defaultScores })
+}
+
+function RadarDecagon({ scores }: { scores: DecagonScores }) {
+  const center = 120
+  const radius = 90
+  const points = scoreKeys.map((key, i) => {
+    const angle = (Math.PI * 2 * i) / scoreKeys.length - Math.PI / 2
+    const r = (scores[key] / 10) * radius
+    return `${center + Math.cos(angle) * r},${center + Math.sin(angle) * r}`
+  })
+
+  const axis = scoreKeys.map((key, i) => {
+    const angle = (Math.PI * 2 * i) / scoreKeys.length - Math.PI / 2
+    const x = center + Math.cos(angle) * radius
+    const y = center + Math.sin(angle) * radius
+    const lx = center + Math.cos(angle) * (radius + 16)
+    const ly = center + Math.sin(angle) * (radius + 16)
+    return { key, x, y, lx, ly }
+  })
+
+  return (
+    <svg viewBox="0 0 240 240" className="h-72 w-72 max-w-full rounded-lg border bg-muted/20 p-2">
+      {[2, 4, 6, 8, 10].map((level) => {
+        const ring = scoreKeys
+          .map((_, i) => {
+            const angle = (Math.PI * 2 * i) / scoreKeys.length - Math.PI / 2
+            const r = (level / 10) * radius
+            return `${center + Math.cos(angle) * r},${center + Math.sin(angle) * r}`
+          })
+          .join(' ')
+        return <polygon key={level} points={ring} fill="none" stroke="currentColor" opacity={0.15} />
+      })}
+
+      {axis.map((a) => (
+        <line key={a.key} x1={center} y1={center} x2={a.x} y2={a.y} stroke="currentColor" opacity={0.2} />
+      ))}
+
+      <polygon points={points.join(' ')} fill="currentColor" opacity={0.25} stroke="currentColor" strokeWidth="2" />
+
+      {axis.map((a) => (
+        <text key={`${a.key}-label`} x={a.lx} y={a.ly} fontSize="9" textAnchor="middle" fill="currentColor">
+          {a.key}
+        </text>
+      ))}
+    </svg>
+  )
+}
+
 function App() {
   const { entries, addEntry, clearAll } = useDiaryStore()
-  const [prompt, setPrompt] = useState(defaultPrompt)
+  const [inputPrompt, setInputPrompt] = useState(defaultInputPrompt)
+  const [userContext, setUserContext] = useState(userContextDefault)
   const [rawInput, setRawInput] = useState('')
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState('')
+  const [weeklyCount, setWeeklyCount] = useState(7)
 
   const sorted = useMemo(
-    () =>
-      [...entries].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      ),
+    () => [...entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [entries],
   )
 
@@ -157,11 +266,10 @@ function App() {
     const now = new Date()
     const thisWeek = getISOWeek(now)
     const thisYear = Number(format(now, 'yyyy'))
-    const target = entries.filter((e) => {
+    return entries.filter((e) => {
       const d = parseISO(e.date)
       return Number(format(d, 'yyyy')) === thisYear && getISOWeek(d) === thisWeek
     })
-    return target
   }, [entries])
 
   const monthly = useMemo(() => {
@@ -174,16 +282,10 @@ function App() {
     return entries.filter((e) => e.date.startsWith(y))
   }, [entries])
 
-  const areaAverages = (list: DiaryEntry[]) => {
-    const map: Record<string, number[]> = {}
-    list.forEach((entry) => {
-      Object.entries(entry.areas).forEach(([k, v]) => {
-        if (!map[k]) map[k] = []
-        map[k].push(v)
-      })
-    })
-    return Object.fromEntries(Object.entries(map).map(([k, vals]) => [k, avg(vals)]))
-  }
+  const selectedWeeklyForPrompt = useMemo(
+    () => sorted.filter((e) => parseISO(e.date) >= subDays(new Date(), weeklyCount - 1)).slice(0, weeklyCount),
+    [sorted, weeklyCount],
+  )
 
   const submit = () => {
     try {
@@ -197,35 +299,104 @@ function App() {
     }
   }
 
-  const copyPrompt = async () => {
+  const copyText = async (text: string, key: string) => {
     try {
-      await navigator.clipboard.writeText(prompt)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1200)
+      await navigator.clipboard.writeText(text)
+      setCopied(key)
+      setTimeout(() => setCopied(''), 1200)
     } catch {
       setError('클립보드 복사에 실패했습니다. 수동 복사해주세요.')
     }
   }
 
+  const buildReportPrompt = (period: '주간' | '월간' | '연간', list: DiaryEntry[]) => `역할: 고급 라이프 코치 & 분석가
+
+아래 사용자 컨텍스트와 일기 JSON 배열을 바탕으로 ${period} 리포트를 작성해.
+반드시 Markdown JSON 코드블록으로만 출력.
+
+[사용자 컨텍스트]
+${userContext}
+
+[일기 데이터]
+${JSON.stringify(list, null, 2)}
+
+출력 형식:
+\`\`\`json
+{
+  "period": "${period}",
+  "summary": "핵심 요약",
+  "praise": ["칭찬1", "칭찬2"],
+  "insights": ["통찰1", "통찰2"],
+  "risks": ["리스크1", "리스크2"],
+  "actionPlan": ["다음 액션1", "다음 액션2", "다음 액션3"],
+  "decagonAverages": {
+    "career": 0,
+    "health": 0,
+    "finance": 0,
+    "relationships": 0,
+    "selfGrowth": 0,
+    "productivity": 0,
+    "emotional": 0,
+    "discipline": 0,
+    "creativity": 0,
+    "leisure": 0
+  }
+}
+\`\`\`
+
+규칙:
+- 숫자는 0~10 범위로
+- 사용자 컨텍스트를 반드시 반영
+- JSON 코드블록 외 텍스트 금지`
+
+  const weeklyPrompt = buildReportPrompt('주간', selectedWeeklyForPrompt)
+  const monthlyPrompt = buildReportPrompt('월간', monthly)
+  const yearlyPrompt = buildReportPrompt('연간', yearly)
+
+  const renderPeriodCard = (label: string, items: DiaryEntry[]) => {
+    const scores = averageDecagon(items)
+    return (
+      <Card key={label}>
+        <CardHeader>
+          <CardTitle>{label} 분석</CardTitle>
+          <CardDescription>
+            총 {items.length}건 · 평균 lifeHelpScore {avg(items.map((i) => i.lifeHelpScore)).toFixed(2)}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <RadarDecagon scores={scores} />
+          <div className="flex flex-wrap gap-2 md:max-w-sm">
+            {scoreKeys.map((k) => (
+              <Badge key={k} variant="secondary">
+                {k}: {scores[k].toFixed(2)}
+              </Badge>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
-    <main className="mx-auto max-w-6xl p-6">
-      <h1 className="text-3xl font-bold">Diary Analyzer (React + Tailwind + shadcn + TSX)</h1>
+    <main className="mx-auto max-w-7xl p-6">
+      <h1 className="text-3xl font-bold">Diary Analyzer (Decagon Edition)</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        로컬 저장(zustand persist/localStorage). 추후 Supabase 마이그레이션 가능 구조.
+        장단점/피드백 노출 + 십각형 점수 + 리포트 프롬프트 복사 기능.
       </p>
 
       <Tabs defaultValue="input" className="mt-6">
-        <TabsList>
+        <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="input">입력</TabsTrigger>
           <TabsTrigger value="history">기록/분석</TabsTrigger>
-          <TabsTrigger value="prompt">LLM 프롬프트</TabsTrigger>
+          <TabsTrigger value="prompt">입력 프롬프트</TabsTrigger>
+          <TabsTrigger value="reports">리포트 프롬프트</TabsTrigger>
         </TabsList>
 
         <TabsContent value="input" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>일기 JSON 입력</CardTitle>
-              <CardDescription>Markdown 코드블록(json) 그대로 붙여넣으면 됩니다.</CardDescription>
+              <CardDescription>Markdown 코드블록(json) 그대로 붙여넣기.</CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
@@ -255,12 +426,29 @@ function App() {
                   <p className="text-sm text-muted-foreground">해당 날짜 데이터가 없습니다.</p>
                 ) : (
                   filtered.map((entry) => (
-                    <div key={entry.id} className="rounded-lg border p-3">
+                    <div key={entry.id} className="space-y-3 rounded-lg border p-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge>{entry.date}</Badge>
                         <Badge variant="outline">입력시각: {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm')}</Badge>
+                        <Badge variant="secondary">lifeHelpScore: {entry.lifeHelpScore}</Badge>
                       </div>
-                      <p className="mt-2 text-sm">{entry.summary}</p>
+                      <p className="text-sm">{entry.summary}</p>
+                      <div>
+                        <p className="text-sm font-semibold">장점</p>
+                        <ul className="list-inside list-disc text-sm text-muted-foreground">
+                          {entry.strengths.map((s, idx) => <li key={`${entry.id}-s-${idx}`}>{s}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">단점/보완점</p>
+                        <ul className="list-inside list-disc text-sm text-muted-foreground">
+                          {entry.weaknesses.map((w, idx) => <li key={`${entry.id}-w-${idx}`}>{w}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">피드백</p>
+                        <p className="text-sm text-muted-foreground">{entry.feedback}</p>
+                      </div>
                     </div>
                   ))
                 )}
@@ -268,51 +456,82 @@ function App() {
             </CardContent>
           </Card>
 
-          {[
-            { label: '주간', items: weekly },
-            { label: '월간', items: monthly },
-            { label: '연간', items: yearly },
-          ].map(({ label, items }) => {
-            const areas = areaAverages(items)
-            return (
-              <Card key={label}>
-                <CardHeader>
-                  <CardTitle>{label} 분석</CardTitle>
-                  <CardDescription>총 {items.length}건 · 평균 lifeHelpScore {avg(items.map((i) => i.lifeHelpScore)).toFixed(2)}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {Object.keys(areas).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">데이터가 없습니다.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(areas).map(([k, v]) => (
-                        <Badge key={k} variant="secondary">{k}: {v.toFixed(2)}</Badge>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+          {renderPeriodCard('주간', weekly)}
+          {renderPeriodCard('월간', monthly)}
+          {renderPeriodCard('연간', yearly)}
 
           <Separator />
           <Button variant="destructive" onClick={clearAll}>로컬 데이터 전체 삭제</Button>
         </TabsContent>
 
-        <TabsContent value="prompt" className="mt-4">
+        <TabsContent value="prompt" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>음성 입력용 LLM 프리픽스 프롬프트</CardTitle>
-              <CardDescription>
-                1) 아래 프롬프트 복사 후 LLM에 먼저 붙여넣기 → 2) LLM이 "알겠습니다. 다음 메시지에 일기를 쓰면 됩니다." 응답 → 3) 일기 입력
-              </CardDescription>
+              <CardTitle>사용자 컨텍스트 (분석 고정 반영)</CardTitle>
+              <CardDescription>LLM이 항상 함께 참고할 정보입니다.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea value={userContext} onChange={(e) => setUserContext(e.target.value)} className="min-h-44" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>입력용 LLM 프리픽스 프롬프트</CardTitle>
+              <CardDescription>먼저 붙여넣으면 LLM이 "알겠습니다..." 라고 답하고, 다음 메시지를 JSON으로 구조화합니다.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="mb-3 flex gap-2">
-                <Button onClick={copyPrompt}>{copied ? '복사됨!' : '프롬프트 복사'}</Button>
-                <Button variant="outline" onClick={() => setPrompt(defaultPrompt)}>기본값 복원</Button>
+                <Button onClick={() => copyText(inputPrompt, 'input')}>{copied === 'input' ? '복사됨!' : '프롬프트 복사'}</Button>
+                <Button variant="outline" onClick={() => setInputPrompt(defaultInputPrompt)}>기본값 복원</Button>
               </div>
-              <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="min-h-80" />
+              <Textarea value={inputPrompt} onChange={(e) => setInputPrompt(e.target.value)} className="min-h-80" />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>주간 리포트 프롬프트</CardTitle>
+              <CardDescription>최근 며칠 데이터를 선택해 프롬프트를 복사할 수 있습니다.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">최근</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={weeklyCount}
+                  onChange={(e) => setWeeklyCount(Math.max(1, Math.min(30, Number(e.target.value) || 7)))}
+                  className="w-24"
+                />
+                <span className="text-sm">일 선택</span>
+                <Badge variant="outline">선택 {selectedWeeklyForPrompt.length}건</Badge>
+              </div>
+              <Button onClick={() => copyText(weeklyPrompt, 'weekly')}>{copied === 'weekly' ? '복사됨!' : '주간 프롬프트 복사'}</Button>
+              <Textarea value={weeklyPrompt} readOnly className="min-h-56" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>월간 리포트 프롬프트</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button onClick={() => copyText(monthlyPrompt, 'monthly')}>{copied === 'monthly' ? '복사됨!' : '월간 프롬프트 복사'}</Button>
+              <Textarea value={monthlyPrompt} readOnly className="min-h-56" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>연간 리포트 프롬프트</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button onClick={() => copyText(yearlyPrompt, 'yearly')}>{copied === 'yearly' ? '복사됨!' : '연간 프롬프트 복사'}</Button>
+              <Textarea value={yearlyPrompt} readOnly className="min-h-56" />
             </CardContent>
           </Card>
         </TabsContent>
