@@ -104,10 +104,12 @@ const defaultInputPrompt = `역할: 일기 구조화 도우미
 \`\`\`json
 {
   "date": "YYYY-MM-DD",
-  "summary": "오늘 일기 3~5문장 요약",
-  "strengths": ["오늘 잘한 점 1", "오늘 잘한 점 2"],
+  "summary": "오늘 일기의 맥락이 드러나는 6~10문장 요약",
+  "encouragement": "따뜻한 오구오구 톤의 공감/격려 3~5문장",
+  "strengths": ["오늘 잘한 점 1", "오늘 잘한 점 2", "오늘 잘한 점 3"],
   "weaknesses": ["보완점 1", "보완점 2"],
-  "feedback": "내일 더 좋아지기 위한 실전 피드백",
+  "feedback": "내일 더 좋아지기 위한 구체적이고 실행 가능한 피드백",
+  "overallWrapUp": "오늘 하루 총정리(잘한 점/아쉬운 점/내일의 핵심) 4~7문장",
   "lifeHelpScore": 1,
   "decagonScores": {
     "career": 0,
@@ -130,7 +132,10 @@ const defaultInputPrompt = `역할: 일기 구조화 도우미
 - lifeHelpScore: 1~10 정수
 - decagonScores: 10개 분야 각각 0~10 정수
 - date는 사용자가 말한 날짜가 있으면 반영, 없으면 오늘 날짜 사용
-- strengths/weaknesses는 최소 2개씩
+- summary는 너무 짧게 쓰지 말고 6~10문장
+- encouragement는 반드시 공감 + 칭찬 + 응원 포함
+- overallWrapUp에는 오늘 총정리와 내일 핵심 한 줄을 반드시 포함
+- strengths는 최소 3개, weaknesses는 최소 2개
 - 기본 전제: 너(LLM)는 이미 사용자 정보를 알고 있다고 가정하고 더 정밀하게 분석
 - 단, 사용자 맥락 정보가 부족하면 needsUserProfile=true 로 바꾸고 profileQuestions 배열에 필요한 질문 3개 이내 작성
 - JSON 코드블록 외 텍스트 금지`
@@ -319,11 +324,13 @@ ${JSON.stringify(list, null, 2)}
 \`\`\`json
 {
   "period": "${period}",
-  "summary": "핵심 요약",
-  "praise": ["칭찬1", "칭찬2"],
-  "insights": ["통찰1", "통찰2"],
+  "summary": "핵심 요약(짧게 말고 충분히 자세하게)",
+  "overallReview": "기간 전체 총정리(성과/패턴/개선점) 8~14문장",
+  "encouragement": "오구오구 톤의 공감 + 칭찬 + 응원 메시지 4~8문장",
+  "praise": ["칭찬1", "칭찬2", "칭찬3"],
+  "insights": ["통찰1", "통찰2", "통찰3"],
   "risks": ["리스크1", "리스크2"],
-  "actionPlan": ["다음 액션1", "다음 액션2", "다음 액션3"],
+  "actionPlan": ["다음 액션1", "다음 액션2", "다음 액션3", "다음 액션4"],
   "decagonAverages": {
     "career": 0,
     "health": 0,
@@ -343,6 +350,8 @@ ${JSON.stringify(list, null, 2)}
 
 규칙:
 - 숫자는 0~10 범위
+- summary/overallReview는 지나치게 짧게 쓰지 말고 맥락 중심으로 충분히 상세하게 작성
+- encouragement는 반드시 따뜻한 공감 + 구체 칭찬 + 현실적 응원 포함
 - known context가 충분하면 needsUserProfile=false
 - known context가 부족하면 needsUserProfile=true, profileQuestions에 필요한 질문 최대 3개
 - JSON 코드블록 외 텍스트 금지`
