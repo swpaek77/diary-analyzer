@@ -26,9 +26,11 @@ type DecagonScores = {
 type DiaryPayload = {
   date: string
   summary: string
+  encouragement: string
   strengths: string[]
   weaknesses: string[]
   feedback: string
+  overallWrapUp: string
   lifeHelpScore: number
   decagonScores: DecagonScores
 }
@@ -181,9 +183,11 @@ function parsePayload(raw: string): DiaryPayload {
   return {
     date: parsed.date,
     summary: String(parsed.summary ?? ''),
+    encouragement: String(parsed.encouragement ?? ''),
     strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
     weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses.map(String) : [],
     feedback: String(parsed.feedback ?? ''),
+    overallWrapUp: String(parsed.overallWrapUp ?? ''),
     lifeHelpScore: score,
     decagonScores,
   }
@@ -455,8 +459,16 @@ ${JSON.stringify(list, null, 2)}
                         </ul>
                       </div>
                       <div>
+                        <p className="text-sm font-semibold">독려/응원</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.encouragement || '독려 내용 없음'}</p>
+                      </div>
+                      <div>
                         <p className="text-sm font-semibold">피드백</p>
-                        <p className="text-sm text-muted-foreground">{entry.feedback}</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.feedback}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">총정리 세션</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.overallWrapUp || '총정리 내용 없음'}</p>
                       </div>
                     </div>
                   ))
