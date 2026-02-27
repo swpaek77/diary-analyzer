@@ -221,7 +221,7 @@ function RadarDecagon({ scores }: { scores: DecagonScores }) {
   })
 
   return (
-    <svg viewBox="0 0 240 240" className="h-72 w-72 max-w-full rounded-lg border bg-muted/20 p-2">
+    <svg viewBox="0 0 240 240" className="h-64 w-64 max-w-full rounded-md border bg-muted/20 p-1">
       {[2, 4, 6, 8, 10].map((level) => {
         const ring = scoreKeys
           .map((_, i) => {
@@ -372,7 +372,7 @@ ${JSON.stringify(list, null, 2)}
             총 {items.length}건 · 평균 lifeHelpScore {avg(items.map((i) => i.lifeHelpScore)).toFixed(2)}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <CardContent className="p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <RadarDecagon scores={scores} />
           <div className="flex flex-wrap gap-2 md:max-w-sm">
             {scoreKeys.map((k) => (
@@ -387,13 +387,13 @@ ${JSON.stringify(list, null, 2)}
   }
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
+    <main className="w-full px-0 py-2">
       <h1 className="text-3xl font-bold">Diary Analyzer (Decagon Edition)</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         장단점/피드백 노출 + 십각형 점수 + 리포트 프롬프트 복사 기능.
       </p>
 
-      <Tabs defaultValue="input" className="mt-6">
+      <Tabs defaultValue="input" className="mt-3">
         <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="input">입력</TabsTrigger>
           <TabsTrigger value="history">기록/분석</TabsTrigger>
@@ -401,13 +401,13 @@ ${JSON.stringify(list, null, 2)}
           <TabsTrigger value="reports">리포트 프롬프트</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="input" className="mt-4 space-y-4">
+        <TabsContent value="input" className="mt-2 space-y-2">
           <Card>
             <CardHeader>
               <CardTitle>일기 JSON 입력</CardTitle>
               <CardDescription>Markdown 코드블록(json) 그대로 붙여넣기.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3">
               <Textarea
                 value={rawInput}
                 onChange={(e) => setRawInput(e.target.value)}
@@ -423,19 +423,19 @@ ${JSON.stringify(list, null, 2)}
           </Card>
         </TabsContent>
 
-        <TabsContent value="history" className="mt-4 space-y-4">
+        <TabsContent value="history" className="mt-2 space-y-2">
           <Card>
             <CardHeader>
               <CardTitle>일별 기록 확인</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="max-w-60" />
+            <CardContent className="p-3">
+              <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full md:w-56" />
               <div className="mt-4 space-y-3">
                 {filtered.length === 0 ? (
                   <p className="text-sm text-muted-foreground">해당 날짜 데이터가 없습니다.</p>
                 ) : (
                   filtered.map((entry) => (
-                    <div key={entry.id} className="space-y-3 rounded-lg border p-3">
+                    <div key={entry.id} className="space-y-2 rounded-md border p-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge>{entry.date}</Badge>
                         <Badge variant="outline">입력시각: {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm')}</Badge>
@@ -473,13 +473,13 @@ ${JSON.stringify(list, null, 2)}
           <Button variant="destructive" onClick={clearAll}>로컬 데이터 전체 삭제</Button>
         </TabsContent>
 
-        <TabsContent value="prompt" className="mt-4 space-y-4">
+        <TabsContent value="prompt" className="mt-2 space-y-2">
           <Card>
             <CardHeader>
               <CardTitle>입력용 LLM 프리픽스 프롬프트</CardTitle>
               <CardDescription>먼저 붙여넣으면 LLM이 "알겠습니다..." 라고 답하고, 다음 메시지를 JSON으로 구조화합니다.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3">
               <div className="mb-3 flex gap-2">
                 <Button onClick={() => copyText(inputPrompt, 'input')}>{copied === 'input' ? '복사됨!' : '프롬프트 복사'}</Button>
                 <Button variant="outline" onClick={() => setInputPrompt(defaultInputPrompt)}>기본값 복원</Button>
@@ -489,13 +489,13 @@ ${JSON.stringify(list, null, 2)}
           </Card>
         </TabsContent>
 
-        <TabsContent value="reports" className="mt-4 space-y-4">
+        <TabsContent value="reports" className="mt-2 space-y-2">
           <Card>
             <CardHeader>
               <CardTitle>주간 리포트 프롬프트</CardTitle>
               <CardDescription>최근 며칠 데이터를 선택해 프롬프트를 복사할 수 있습니다.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="p-3 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm">최근</span>
                 <Input
@@ -518,7 +518,7 @@ ${JSON.stringify(list, null, 2)}
             <CardHeader>
               <CardTitle>월간 리포트 프롬프트</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="p-3 space-y-2">
               <Button onClick={() => copyText(monthlyPrompt, 'monthly')}>{copied === 'monthly' ? '복사됨!' : '월간 프롬프트 복사'}</Button>
               <Textarea value={monthlyPrompt} readOnly className="min-h-56" />
             </CardContent>
@@ -528,7 +528,7 @@ ${JSON.stringify(list, null, 2)}
             <CardHeader>
               <CardTitle>연간 리포트 프롬프트</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="p-3 space-y-2">
               <Button onClick={() => copyText(yearlyPrompt, 'yearly')}>{copied === 'yearly' ? '복사됨!' : '연간 프롬프트 복사'}</Button>
               <Textarea value={yearlyPrompt} readOnly className="min-h-56" />
             </CardContent>
