@@ -93,14 +93,6 @@ const useDiaryStore = create<DiaryStore>()(
   ),
 )
 
-const userContextDefault = `사용자 정보(항상 분석에 반영):
-- 이름: 백승우(1991)
-- 직무: 현대자동차 ICT 프론트엔드 개발자, 파트 리더(G3)
-- 관심사: 커리어 성장, 건강 루틴, 자산관리, AI 자동화, 글쓰기
-- 목표: 리더십 성장 + 장기 자산 축적 + 꾸준한 자기계발
-
-분석 시 위 정보를 반드시 함께 고려해서 조언/분석/칭찬을 작성해.`
-
 const defaultInputPrompt = `역할: 일기 구조화 도우미
 
 중요: 지금 이 메시지(프롬프트)를 받으면 첫 응답은 아래 문장으로만 출력해.
@@ -128,7 +120,9 @@ const defaultInputPrompt = `역할: 일기 구조화 도우미
     "discipline": 0,
     "creativity": 0,
     "leisure": 0
-  }
+  },
+  "needsUserProfile": false,
+  "profileQuestions": []
 }
 \`\`\`
 
@@ -137,7 +131,10 @@ const defaultInputPrompt = `역할: 일기 구조화 도우미
 - decagonScores: 10개 분야 각각 0~10 정수
 - date는 사용자가 말한 날짜가 있으면 반영, 없으면 오늘 날짜 사용
 - strengths/weaknesses는 최소 2개씩
+- 기본 전제: 너(LLM)는 이미 사용자 정보를 알고 있다고 가정하고 더 정밀하게 분석
+- 단, 사용자 맥락 정보가 부족하면 needsUserProfile=true 로 바꾸고 profileQuestions 배열에 필요한 질문 3개 이내 작성
 - JSON 코드블록 외 텍스트 금지`
+
 
 function sanitizeJson(raw: string) {
   const match = raw.match(/```json\s*([\s\S]*?)```/i)
@@ -248,7 +245,6 @@ function RadarDecagon({ scores }: { scores: DecagonScores }) {
 function App() {
   const { entries, addEntry, clearAll } = useDiaryStore()
   const [inputPrompt, setInputPrompt] = useState(defaultInputPrompt)
-  const [userContext, setUserContext] = useState(userContextDefault)
   const [rawInput, setRawInput] = useState('')
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [error, setError] = useState('')
@@ -311,11 +307,10 @@ function App() {
 
   const buildReportPrompt = (period: '주간' | '월간' | '연간', list: DiaryEntry[]) => `역할: 고급 라이프 코치 & 분석가
 
-아래 사용자 컨텍스트와 일기 JSON 배열을 바탕으로 ${period} 리포트를 작성해.
+아래 일기 JSON 배열을 바탕으로 ${period} 리포트를 작성해.
+기본 전제: 너(LLM)는 사용자의 장기 맥락 정보를 이미 알고 있다.
+그 맥락을 활용해 조언/분석/칭찬을 작성하되, 맥락이 부족하면 필요한 정보를 먼저 요청할 수 있어야 한다.
 반드시 Markdown JSON 코드블록으로만 출력.
-
-[사용자 컨텍스트]
-${userContext}
 
 [일기 데이터]
 ${JSON.stringify(list, null, 2)}
@@ -340,13 +335,16 @@ ${JSON.stringify(list, null, 2)}
     "discipline": 0,
     "creativity": 0,
     "leisure": 0
-  }
+  },
+  "needsUserProfile": false,
+  "profileQuestions": []
 }
 \`\`\`
 
 규칙:
-- 숫자는 0~10 범위로
-- 사용자 컨텍스트를 반드시 반영
+- 숫자는 0~10 범위
+- known context가 충분하면 needsUserProfile=false
+- known context가 부족하면 needsUserProfile=true, profileQuestions에 필요한 질문 최대 3개
 - JSON 코드블록 외 텍스트 금지`
 
   const weeklyPrompt = buildReportPrompt('주간', selectedWeeklyForPrompt)
@@ -465,16 +463,6 @@ ${JSON.stringify(list, null, 2)}
         </TabsContent>
 
         <TabsContent value="prompt" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>사용자 컨텍스트 (분석 고정 반영)</CardTitle>
-              <CardDescription>LLM이 항상 함께 참고할 정보입니다.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Textarea value={userContext} onChange={(e) => setUserContext(e.target.value)} className="min-h-44" />
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle>입력용 LLM 프리픽스 프롬프트</CardTitle>
