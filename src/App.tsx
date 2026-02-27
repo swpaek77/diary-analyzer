@@ -365,7 +365,7 @@ ${JSON.stringify(list, null, 2)}
   const renderPeriodCard = (label: string, items: DiaryEntry[]) => {
     const scores = averageDecagon(items)
     return (
-      <Card key={label}>
+      <Card key={label} className="rounded-none border-x-0 border-t-0 shadow-none">
         <CardHeader>
           <CardTitle>{label} 분석</CardTitle>
           <CardDescription>
@@ -387,7 +387,7 @@ ${JSON.stringify(list, null, 2)}
   }
 
   return (
-    <main className="w-full px-0 py-2">
+    <main className="w-full px-0 py-2 overflow-x-hidden">
       <h1 className="text-3xl font-bold">Diary Analyzer (Decagon Edition)</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         장단점/피드백 노출 + 십각형 점수 + 리포트 프롬프트 복사 기능.
@@ -401,8 +401,8 @@ ${JSON.stringify(list, null, 2)}
           <TabsTrigger value="reports">리포트 프롬프트</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="input" className="mt-2 space-y-2">
-          <Card>
+        <TabsContent value="input" className="mt-2 space-y-2 overflow-x-hidden">
+          <Card className="rounded-none border-x-0 border-t-0 shadow-none">
             <CardHeader>
               <CardTitle>일기 JSON 입력</CardTitle>
               <CardDescription>Markdown 코드블록(json) 그대로 붙여넣기.</CardDescription>
@@ -423,8 +423,8 @@ ${JSON.stringify(list, null, 2)}
           </Card>
         </TabsContent>
 
-        <TabsContent value="history" className="mt-2 space-y-2">
-          <Card>
+        <TabsContent value="history" className="mt-2 space-y-2 overflow-x-hidden">
+          <Card className="rounded-none border-x-0 border-t-0 shadow-none">
             <CardHeader>
               <CardTitle>일별 기록 확인</CardTitle>
             </CardHeader>
@@ -473,8 +473,8 @@ ${JSON.stringify(list, null, 2)}
           <Button variant="destructive" onClick={clearAll}>로컬 데이터 전체 삭제</Button>
         </TabsContent>
 
-        <TabsContent value="prompt" className="mt-2 space-y-2">
-          <Card>
+        <TabsContent value="prompt" className="mt-2 space-y-2 overflow-x-hidden">
+          <Card className="rounded-none border-x-0 border-t-0 shadow-none">
             <CardHeader>
               <CardTitle>입력용 LLM 프리픽스 프롬프트</CardTitle>
               <CardDescription>먼저 붙여넣으면 LLM이 "알겠습니다..." 라고 답하고, 다음 메시지를 JSON으로 구조화합니다.</CardDescription>
@@ -489,8 +489,8 @@ ${JSON.stringify(list, null, 2)}
           </Card>
         </TabsContent>
 
-        <TabsContent value="reports" className="mt-2 space-y-2">
-          <Card>
+        <TabsContent value="reports" className="mt-2 space-y-2 overflow-x-hidden">
+          <Card className="rounded-none border-x-0 border-t-0 shadow-none">
             <CardHeader>
               <CardTitle>주간 리포트 프롬프트</CardTitle>
               <CardDescription>최근 며칠 데이터를 선택해 프롬프트를 복사할 수 있습니다.</CardDescription>
@@ -514,7 +514,7 @@ ${JSON.stringify(list, null, 2)}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-none border-x-0 border-t-0 shadow-none">
             <CardHeader>
               <CardTitle>월간 리포트 프롬프트</CardTitle>
             </CardHeader>
@@ -524,7 +524,7 @@ ${JSON.stringify(list, null, 2)}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-none border-x-0 border-t-0 shadow-none">
             <CardHeader>
               <CardTitle>연간 리포트 프롬프트</CardTitle>
             </CardHeader>
