@@ -23,8 +23,12 @@ type DecagonScores = {
   leisure: number
 }
 
+type PeriodType = 'daily' | 'weekly' | 'monthly' | 'yearly'
+
 type DiaryPayload = {
   date: string
+  periodType: PeriodType
+  periodLabel: string
   summary: string
   encouragement: string
   strengths: string[]
@@ -43,6 +47,7 @@ type DiaryEntry = DiaryPayload & {
 type DiaryStore = {
   entries: DiaryEntry[]
   addEntry: (payload: DiaryPayload) => void
+  removeEntry: (id: string) => void
   clearAll: () => void
 }
 
@@ -87,6 +92,7 @@ const useDiaryStore = create<DiaryStore>()(
             ...state.entries,
           ],
         })),
+      removeEntry: (id) => set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
       clearAll: () => set({ entries: [] }),
     }),
     {
@@ -105,6 +111,8 @@ const defaultInputPrompt = `역할: 일기 구조화 도우미
 
 \`\`\`json
 {
+  "periodType": "daily",
+  "periodLabel": "2026-02-27",
   "date": "YYYY-MM-DD",
   "summary": "오늘 일기의 맥락이 드러나는 6~10문장 요약",
   "encouragement": "따뜻한 오구오구 톤의 공감/격려 3~5문장",
@@ -131,9 +139,11 @@ const defaultInputPrompt = `역할: 일기 구조화 도우미
 \`\`\`
 
 규칙:
+- periodType: daily|weekly|monthly|yearly (또는 일간/주간/월간/연간)
+- periodLabel: 예) 2026-02-27, 2026-W09, 2026-02, 2026
 - lifeHelpScore: 1~10 정수
 - decagonScores: 10개 분야 각각 0~10 정수
-- date는 사용자가 말한 날짜가 있으면 반영, 없으면 오늘 날짜 사용
+- daily일 때는 date(YYYY-MM-DD) 필수, 그 외 periodType은 date 생략 가능
 - summary는 너무 짧게 쓰지 말고 6~10문장
 - encouragement는 반드시 공감 + 칭찬 + 응원 포함
 - overallWrapUp은 '요약'보다 '총정리 세션' 톤으로 작성 (권장 18~30줄, 일기 길이가 길면 최대 30줄 근접)
@@ -157,9 +167,24 @@ function toScore(value: unknown) {
 function parsePayload(raw: string): DiaryPayload {
   const parsed = JSON.parse(sanitizeJson(raw))
 
-  if (!parsed.date || !isValid(parseISO(parsed.date))) {
+  const periodMap: Record<string, PeriodType> = {
+    daily: 'daily',
+    weekly: 'weekly',
+    monthly: 'monthly',
+    yearly: 'yearly',
+    일간: 'daily',
+    주간: 'weekly',
+    월간: 'monthly',
+    연간: 'yearly',
+  }
+  const periodType = periodMap[String(parsed.periodType ?? 'daily')] ?? 'daily'
+
+  const rawDate = String(parsed.date ?? '').trim()
+  const parsedDate = rawDate ? parseISO(rawDate) : null
+  if (periodType === 'daily' && (!rawDate || !parsedDate || !isValid(parsedDate))) {
     throw new Error('date는 YYYY-MM-DD 형식이어야 합니다.')
   }
+  const date = rawDate && parsedDate && isValid(parsedDate) ? rawDate : format(new Date(), 'yyyy-MM-dd')
 
   const score = Number(parsed.lifeHelpScore)
   if (!Number.isInteger(score) || score < 1 || score > 10) {
@@ -180,8 +205,19 @@ function parsePayload(raw: string): DiaryPayload {
     leisure: toScore(source.leisure),
   }
 
+  const periodLabel = String(parsed.periodLabel ?? '').trim() ||
+    (periodType === 'daily'
+      ? date
+      : periodType === 'weekly'
+        ? `W${format(new Date(date), 'II')} ${format(new Date(date), 'yyyy')}`
+        : periodType === 'monthly'
+          ? format(new Date(date), 'yyyy-MM')
+          : format(new Date(date), 'yyyy'))
+
   return {
-    date: parsed.date,
+    date,
+    periodType,
+    periodLabel,
     summary: String(parsed.summary ?? ''),
     encouragement: String(parsed.encouragement ?? ''),
     strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
@@ -253,7 +289,7 @@ function RadarDecagon({ scores }: { scores: DecagonScores }) {
 }
 
 function App() {
-  const { entries, addEntry, clearAll } = useDiaryStore()
+  const { entries, addEntry, removeEntry, clearAll } = useDiaryStore()
   const [inputPrompt, setInputPrompt] = useState(defaultInputPrompt)
   const [rawInput, setRawInput] = useState('')
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -266,7 +302,13 @@ function App() {
     [entries],
   )
 
-  const filtered = useMemo(() => sorted.filter((entry) => entry.date === filterDate), [sorted, filterDate])
+  const filtered = useMemo(
+    () => sorted.filter((entry) => entry.periodType === 'daily' && entry.date === filterDate),
+    [sorted, filterDate],
+  )
+  const weeklyEntries = useMemo(() => sorted.filter((entry) => entry.periodType === 'weekly'), [sorted])
+  const monthlyEntries = useMemo(() => sorted.filter((entry) => entry.periodType === 'monthly'), [sorted])
+  const yearlyEntries = useMemo(() => sorted.filter((entry) => entry.periodType === 'yearly'), [sorted])
 
   const weekly = useMemo(() => {
     const now = new Date()
@@ -299,7 +341,7 @@ function App() {
       addEntry(payload)
       setRawInput('')
       setError('')
-      setFilterDate(payload.date)
+      if (payload.periodType === 'daily') setFilterDate(payload.date)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'JSON 파싱에 실패했습니다.')
     }
@@ -390,6 +432,46 @@ ${JSON.stringify(list, null, 2)}
     )
   }
 
+  const renderEntryList = (list: DiaryEntry[], emptyText: string) => (
+    <div className="mt-3 space-y-2">
+      {list.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{emptyText}</p>
+      ) : (
+        list.map((entry) => (
+          <div key={entry.id} className="space-y-2 rounded-md border p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{entry.periodLabel || entry.date}</Badge>
+              <Badge variant="outline">입력시각: {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm')}</Badge>
+              <Badge variant="secondary">lifeHelpScore: {entry.lifeHelpScore}</Badge>
+              <Button
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  if (window.confirm('이 기록을 삭제할까요?')) removeEntry(entry.id)
+                }}
+              >
+                삭제
+              </Button>
+            </div>
+            <p className="text-sm whitespace-pre-wrap">{entry.summary}</p>
+            <div>
+              <p className="text-sm font-semibold">독려/응원</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.encouragement || '독려 내용 없음'}</p>
+            </div>
+            <div>
+              <p className="text-sm font-semibold">피드백</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.feedback}</p>
+            </div>
+            <div>
+              <p className="text-sm font-semibold">총정리 세션</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.overallWrapUp || '총정리 내용 없음'}</p>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+
   return (
     <main className="w-full px-0 py-2 overflow-x-hidden">
       <h1 className="text-3xl font-bold">Diary Analyzer (Decagon Edition)</h1>
@@ -430,50 +512,31 @@ ${JSON.stringify(list, null, 2)}
         <TabsContent value="history" className="mt-2 space-y-2 overflow-x-hidden">
           <Card className="rounded-none border-x-0 border-t-0 shadow-none">
             <CardHeader>
-              <CardTitle>일별 기록 확인</CardTitle>
+              <CardTitle>기록 보기</CardTitle>
             </CardHeader>
             <CardContent className="p-3">
-              <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full md:w-56" />
-              <div className="mt-4 space-y-3">
-                {filtered.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">해당 날짜 데이터가 없습니다.</p>
-                ) : (
-                  filtered.map((entry) => (
-                    <div key={entry.id} className="space-y-2 rounded-md border p-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge>{entry.date}</Badge>
-                        <Badge variant="outline">입력시각: {format(new Date(entry.createdAt), 'yyyy-MM-dd HH:mm')}</Badge>
-                        <Badge variant="secondary">lifeHelpScore: {entry.lifeHelpScore}</Badge>
-                      </div>
-                      <p className="text-sm">{entry.summary}</p>
-                      <div>
-                        <p className="text-sm font-semibold">장점</p>
-                        <ul className="list-inside list-disc text-sm text-muted-foreground">
-                          {entry.strengths.map((s, idx) => <li key={`${entry.id}-s-${idx}`}>{s}</li>)}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">단점/보완점</p>
-                        <ul className="list-inside list-disc text-sm text-muted-foreground">
-                          {entry.weaknesses.map((w, idx) => <li key={`${entry.id}-w-${idx}`}>{w}</li>)}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">독려/응원</p>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.encouragement || '독려 내용 없음'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">피드백</p>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.feedback}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">총정리 세션</p>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.overallWrapUp || '총정리 내용 없음'}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              <Tabs defaultValue="daily-list" className="w-full overflow-x-hidden">
+                <TabsList className="flex h-auto flex-wrap w-full">
+                  <TabsTrigger value="daily-list">일간</TabsTrigger>
+                  <TabsTrigger value="weekly-list">주간</TabsTrigger>
+                  <TabsTrigger value="monthly-list">월간</TabsTrigger>
+                  <TabsTrigger value="yearly-list">연간</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="daily-list" className="mt-2 overflow-x-hidden">
+                  <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full md:w-56" />
+                  {renderEntryList(filtered, '해당 날짜의 일간 기록이 없습니다.')}
+                </TabsContent>
+                <TabsContent value="weekly-list" className="mt-2 overflow-x-hidden">
+                  {renderEntryList(weeklyEntries, '주간 기록이 없습니다.')}
+                </TabsContent>
+                <TabsContent value="monthly-list" className="mt-2 overflow-x-hidden">
+                  {renderEntryList(monthlyEntries, '월간 기록이 없습니다.')}
+                </TabsContent>
+                <TabsContent value="yearly-list" className="mt-2 overflow-x-hidden">
+                  {renderEntryList(yearlyEntries, '연간 기록이 없습니다.')}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
 
@@ -482,7 +545,14 @@ ${JSON.stringify(list, null, 2)}
           {renderPeriodCard('연간', yearly)}
 
           <Separator />
-          <Button variant="destructive" onClick={clearAll}>로컬 데이터 전체 삭제</Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              if (window.confirm('정말 전체 데이터를 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) clearAll()
+            }}
+          >
+            로컬 데이터 전체 삭제
+          </Button>
         </TabsContent>
 
         <TabsContent value="prompt" className="mt-2 space-y-2 overflow-x-hidden">
