@@ -172,12 +172,17 @@ function parsePayload(raw: string): DiaryPayload {
     weekly: 'weekly',
     monthly: 'monthly',
     yearly: 'yearly',
+    day: 'daily',
+    week: 'weekly',
+    month: 'monthly',
+    year: 'yearly',
     일간: 'daily',
     주간: 'weekly',
     월간: 'monthly',
     연간: 'yearly',
   }
-  const periodType = periodMap[String(parsed.periodType ?? 'daily')] ?? 'daily'
+  const periodToken = String(parsed.periodType ?? parsed.period ?? 'daily').trim().toLowerCase()
+  const periodType = periodMap[periodToken] ?? 'daily'
 
   const rawDate = String(parsed.date ?? '').trim()
   const parsedDate = rawDate ? parseISO(rawDate) : null
